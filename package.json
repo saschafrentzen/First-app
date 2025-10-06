@@ -11,10 +11,19 @@
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "^1.21.0",
     "@react-native-community/netinfo": "^11.2.1",
+    "d3-shape": "^3.2.0",
+    "expo-crypto": "~15.0.7",
+    "expo-document-picker": "^14.0.7",
+    "expo-file-system": "~19.0.16",
+    "expo-notifications": "~0.32.12",
+    "expo-sharing": "^14.0.7",
     "react": "^18.2.0",
-    "react-native": "^0.73.2"
+    "react-native": "^0.73.2",
+    "react-native-paper": "^5.14.5",
+    "react-native-svg-charts": "^5.4.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
@@ -26,8 +35,11 @@
     "@react-native/metro-config": "^0.73.3",
     "@react-native/typescript-config": "^0.73.1",
     "@tsconfig/react-native": "^3.0.7",
+    "@types/d3-shape": "^3.1.7",
+    "@types/node": "^24.7.0",
     "@types/react": "^18.2.48",
     "@types/react-native": "^0.73.0",
+    "@types/react-native-svg-charts": "^5.0.16",
     "typescript": "^5.0.4"
   }
 }

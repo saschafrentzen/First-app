@@ -1,5 +1,5 @@
-import { StorageError } from 'types/errors';
-import { Product } from 'types/products';
+import { StorageError } from '../types/errors';
+import { Product } from '../types/products';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const OPEN_FOOD_FACTS_API = 'https://world.openfoodfacts.org/api/v2';

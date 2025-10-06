@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { List, FAB } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { RootStackParamList } from '../types/navigation';
 import { ShoppingList } from '../types/storage';
 import { OfflineStorage } from '../services/offlineStorage';
 
 export const ListsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const route = useRoute();
+  const route = useRoute<RouteProp<RootStackParamList, 'Lists'>>();
   const [lists, setLists] = useState<ShoppingList[]>([]);
 
   useEffect(() => {

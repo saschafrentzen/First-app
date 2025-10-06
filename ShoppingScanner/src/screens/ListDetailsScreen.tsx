@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { List, Text, ActivityIndicator } from 'react-native-paper';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import { RootStackParamList } from '../types/navigation';
 import { ShoppingList } from '../types/storage';
 import { OfflineStorage } from '../services/offlineStorage';
 
 export const ListDetailsScreen: React.FC = () => {
-  const route = useRoute();
+  const route = useRoute<RouteProp<RootStackParamList, 'ListDetails'>>();
   const [list, setList] = useState<ShoppingList | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,7 +17,8 @@ export const ListDetailsScreen: React.FC = () => {
 
   const loadList = async () => {
     try {
-      const listId = route.params?.listId;
+      if (!route.params) return;
+      const { listId } = route.params;
       if (!listId) return;
 
       const lists = await OfflineStorage.getLists();

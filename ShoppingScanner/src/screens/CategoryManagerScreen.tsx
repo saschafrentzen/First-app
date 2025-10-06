@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { CustomCategory, categoryService } from '../services/categoryService';
+import { CategoryValidationError } from '../types/category';
 import { CategoryForm } from '../components/CategoryForm';
 import { useTheme } from '../hooks/useTheme';
 
@@ -9,7 +13,25 @@ export const CategoryManagerScreen = () => {
   const [categories, setCategories] = useState<CustomCategory[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CustomCategory | undefined>();
+  const [validationErrors, setValidationErrors] = useState<CategoryValidationError[]>([]);
   const { theme } = useTheme();
+
+  const validateCategories = async () => {
+    try {
+      const result = await categoryService.validateCategoryStructure();
+      if (!result.isValid) {
+        setValidationErrors(result.errors);
+        Alert.alert(
+          'Validierungsfehler',
+          'Es wurden Probleme in der Kategoriestruktur gefunden. Bitte überprüfen Sie die Fehler.'
+        );
+      } else {
+        setValidationErrors([]);
+      }
+    } catch (error) {
+      console.error('Fehler bei der Kategorievalidierung:', error);
+    }
+  };
 
   useEffect(() => {
     loadCategories();
@@ -107,7 +129,7 @@ export const CategoryManagerScreen = () => {
                 {item.name}
               </Text>
               {parent && (
-                <Text style={[styles.parentName, { color: theme.textSecondary }]}>
+                <Text style={[styles.parentName, { color: theme.text, opacity: 0.7 }]}>
                   Unterkategorie von: {parent.name}
                 </Text>
               )}
@@ -137,8 +159,69 @@ export const CategoryManagerScreen = () => {
     );
   }
 
+  const handleImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync();
+      
+      if (result.assets && result.assets.length > 0) {
+        const response = await fetch(result.assets[0].uri);
+        const text = await response.text();
+        await categoryService.importCategories(JSON.parse(text));
+        loadCategories();
+        Alert.alert('Erfolg', 'Kategorien wurden erfolgreich importiert.');
+      }
+    } catch (error) {
+      Alert.alert('Fehler', 'Kategorien konnten nicht importiert werden.');
+      console.error(error);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const jsonString = categoryService.exportCategories();
+      const info = await FileSystem.getInfoAsync('.');
+      const tempFile = `${info.uri}/categories_export.json`;
+      
+      await FileSystem.writeAsStringAsync(tempFile, jsonString);
+      
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('Teilen ist auf diesem Gerät nicht verfügbar');
+      }
+      
+      await Sharing.shareAsync(tempFile, {
+        mimeType: 'application/json',
+        dialogTitle: 'Kategorien exportieren',
+        UTI: 'public.json'
+      });
+      
+      Alert.alert('Erfolg', 'Kategorien wurden erfolgreich exportiert.');
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Fehler', 'Kategorien konnten nicht exportiert werden.');
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={styles.header}>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: theme.primary }]}
+            onPress={handleImport}
+          >
+            <MaterialCommunityIcons name="import" size={24} color="#fff" />
+            <Text style={styles.buttonText}>Importieren</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: theme.primary }]}
+            onPress={handleExport}
+          >
+            <MaterialCommunityIcons name="export" size={24} color="#fff" />
+            <Text style={styles.buttonText}>Exportieren</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <TouchableOpacity
         style={[styles.addButton, { backgroundColor: theme.primary }]}
         onPress={() => setShowForm(true)}
@@ -164,6 +247,28 @@ export const CategoryManagerScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    padding: 16,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 4,
+    justifyContent: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    marginLeft: 8,
   },
   addButton: {
     flexDirection: 'row',

@@ -1,0 +1,158 @@
+import { CustomCategory, CategoryRule } from '../types/category';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+class CategoryService {
+  private static instance: CategoryService;
+  private categories: Map<string, CustomCategory> = new Map();
+  private rules: Map<string, CategoryRule> = new Map();
+
+  private constructor() {
+    this.loadCategories();
+    this.loadRules();
+  }
+
+  static getInstance(): CategoryService {
+    if (!CategoryService.instance) {
+      CategoryService.instance = new CategoryService();
+    }
+    return CategoryService.instance;
+  }
+
+  // Validierungsmethoden für Regeln
+  private validateRule(rule: Partial<CategoryRule>): void {
+    // Grundlegende Struktur prüfen
+    if (!rule) {
+      throw new Error('Regel darf nicht leer sein');
+    }
+
+    if (!rule.condition) {
+      throw new Error('Regel muss eine Bedingung enthalten');
+    }
+
+    if (!rule.condition.operator || !rule.condition.value) {
+      throw new Error('Regelbedingung muss einen Operator und einen Wert enthalten');
+    }
+
+    // Operator validieren
+    const validOperators = ['contains', 'equals', 'startsWith', 'endsWith', 'regex'];
+    if (!validOperators.includes(rule.condition.operator)) {
+      throw new Error(`Ungültiger Operator. Erlaubte Werte sind: ${validOperators.join(', ')}`);
+    }
+
+    // Regex-Syntax prüfen
+    if (rule.condition.operator === 'regex') {
+      try {
+        new RegExp(rule.condition.value);
+      } catch {
+        throw new Error('Ungültiger regulärer Ausdruck');
+      }
+    }
+
+    // Priorität prüfen
+    if (typeof rule.priority !== 'number' || rule.priority < 0) {
+      throw new Error('Priorität muss eine positive Zahl sein');
+    }
+
+    // Status prüfen
+    if (rule.isActive !== undefined && typeof rule.isActive !== 'boolean') {
+      throw new Error('isActive muss ein Boolean-Wert sein');
+    }
+
+    // Kategoriereferenzen prüfen
+    if (rule.categoryIds && (!Array.isArray(rule.categoryIds) || rule.categoryIds.some(id => typeof id !== 'string'))) {
+      throw new Error('categoryIds muss ein Array von Strings sein');
+    }
+  }
+
+  private checkRuleDuplicates(rule: Partial<CategoryRule>): CategoryRule | undefined {
+    return Array.from(this.rules.values()).find(existingRule => 
+      existingRule.condition.operator === rule.condition?.operator &&
+      existingRule.condition.value === rule.condition?.value
+    );
+  }
+
+  // Import/Export Funktionen mit verbesserter Validierung
+  async importCategories(data: string, format: 'json' | 'csv', options: {
+    conflictResolution: 'skip' | 'overwrite' | 'rename';
+    validateHierarchy?: boolean;
+    importRules?: boolean;
+  }): Promise<{
+    imported: number;
+    skipped: number;
+    errors: Array<{ id: string; error: string }>;
+  }> {
+    const result = {
+      imported: 0,
+      skipped: 0,
+      errors: [] as Array<{ id: string; error: string }>
+    };
+
+    try {
+      if (format === 'json') {
+        const importData = JSON.parse(data);
+        
+        // Validiere Version und Format
+        if (!importData.categories || !Array.isArray(importData.categories)) {
+          throw new Error('Ungültiges Import-Format: categories muss ein Array sein');
+        }
+
+        // Importiere Regeln zuerst, wenn gewünscht
+        if (options.importRules) {
+          if (!importData.rules || !Array.isArray(importData.rules)) {
+            result.errors.push({
+              id: 'format',
+              error: 'Ungültiges Regelformat: rules muss ein Array sein'
+            });
+          } else {
+            for (const rule of importData.rules) {
+              try {
+                // Validiere die Regel
+                this.validateRule(rule);
+                
+                // Prüfe auf Duplikate
+                const duplicateRule = this.checkRuleDuplicates(rule);
+                if (duplicateRule) {
+                  result.errors.push({
+                    id: rule.id || 'unbekannt',
+                    error: `Eine ähnliche Regel existiert bereits (ID: ${duplicateRule.id})`
+                  });
+                  continue;
+                }
+                
+                // Prüfe Kategoriereferenzen
+                if (rule.categoryIds) {
+                  const invalidCategories = rule.categoryIds.filter(id => !this.categories.has(id));
+                  if (invalidCategories.length > 0) {
+                    result.errors.push({
+                      id: rule.id || 'unbekannt',
+                      error: `Regel verweist auf nicht existierende Kategorien: ${invalidCategories.join(', ')}`
+                    });
+                    continue;
+                  }
+                }
+                
+                await this.addCategoryRule(rule);
+              } catch (error) {
+                result.errors.push({
+                  id: rule.id || 'unbekannt',
+                  error: error instanceof Error 
+                    ? `Fehler beim Importieren der Regel: ${error.message}`
+                    : 'Unbekannter Fehler beim Import der Regel'
+                });
+              }
+            }
+          }
+        }
+
+        // Rest der Methode bleibt unverändert...
+      }
+      // Rest der Methode bleibt unverändert...
+    } catch (error) {
+      throw new Error(error instanceof Error ? `Import fehlgeschlagen: ${error.message}` : 'Unbekannter Import-Fehler');
+    }
+  }
+
+  // Andere Methoden bleiben unverändert...
+}
+
+export const categoryService = CategoryService.getInstance();

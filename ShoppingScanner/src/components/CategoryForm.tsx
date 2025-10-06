@@ -14,7 +14,7 @@ interface CategoryFormProps {
 export const CategoryForm: React.FC<CategoryFormProps> = ({ initialCategory, onSave, onCancel }) => {
   const [name, setName] = useState(initialCategory?.name || '');
   const [color, setColor] = useState(initialCategory?.color || '#000000');
-  const [icon, setIcon] = useState(initialCategory?.icon || '');
+  const [icon, setIcon] = useState<typeof icons[number]>(initialCategory?.icon as typeof icons[number] || 'food-apple');
   const [parentCategory, setParentCategory] = useState<string | undefined>(initialCategory?.parentCategory);
   const [categories, setCategories] = useState<CustomCategory[]>([]);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -49,9 +49,9 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({ initialCategory, onS
   };
 
   const icons = [
-    'food', 'home', 'shower', 'cart', 'cash', 'clothes', 
+    'food-apple', 'home', 'shower', 'cart', 'cash', 'hanger', 
     'car', 'medical-bag', 'book', 'gamepad', 'gift', 'tools'
-  ];
+  ] as const;
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>

@@ -1,4 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
+import { CategoryValidationError } from '../types/category';
 import { StorageError } from '../types/errors';
 
 const CUSTOM_CATEGORIES_KEY = '@custom_categories';
@@ -160,6 +164,121 @@ class CategoryService {
     }
 
     return path;
+  }
+
+  public exportCategories(): string {
+    const exportData = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      categories: this.categories
+    };
+    
+    return JSON.stringify(exportData, null, 2);
+  }
+
+  public async importCategories(jsonData: any): Promise<void> {
+    try {
+      // Validiere das Import-Format
+      if (!jsonData.version || !jsonData.categories || !Array.isArray(jsonData.categories)) {
+        throw new Error('Ungültiges Import-Format');
+      }
+
+      // Validiere jede Kategorie
+      const validCategories = jsonData.categories.filter((cat: any) => {
+        return cat.id && cat.name && cat.color;
+      });
+
+      // Merge-Strategie: Behalte existierende Kategorien wenn gleiche ID
+      const updatedCategories = [...this.categories];
+      
+      for (const importCat of validCategories) {
+        const existingIndex = updatedCategories.findIndex(cat => cat.id === importCat.id);
+        if (existingIndex >= 0) {
+          // Update existierende Kategorie
+          updatedCategories[existingIndex] = {
+            ...importCat,
+            lastModified: new Date().toISOString()
+          };
+        } else {
+          // Füge neue Kategorie hinzu
+          updatedCategories.push({
+            ...importCat,
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            createdAt: new Date().toISOString(),
+            lastModified: new Date().toISOString()
+          });
+        }
+      }
+
+      this.categories = updatedCategories;
+      await this.save();
+    } catch (error) {
+      console.error('Fehler beim Importieren der Kategorien:', error);
+      throw new StorageError('Kategorien konnten nicht importiert werden');
+    }
+  }
+
+  public async validateCategoryStructure(): Promise<{ isValid: boolean; errors: CategoryValidationError[] }> {
+    await this.initialize();
+    const errors: CategoryValidationError[] = [];
+    
+    // 1. Check for duplicate IDs
+    const ids = new Set<string>();
+    this.categories.forEach(cat => {
+      if (ids.has(cat.id)) {
+        errors.push({
+          errorType: 'duplicate-id',
+          message: `Die Kategorie "${cat.name}" hat eine doppelte ID: ${cat.id}`,
+          categoryId: cat.id
+        });
+      }
+      ids.add(cat.id);
+    });
+
+    // 2. Check for invalid parent references
+    this.categories.forEach(cat => {
+      if (cat.parentCategory) {
+        const parentExists = this.categories.some(parent => parent.id === cat.parentCategory);
+        if (!parentExists) {
+          errors.push({
+            errorType: 'invalid-parent',
+            message: `Die Kategorie "${cat.name}" verweist auf eine nicht existierende Elternkategorie: ${cat.parentCategory}`,
+            categoryId: cat.id
+          });
+        }
+      }
+    });
+
+    // 3. Check for circular references
+    this.categories.forEach(cat => {
+      if (this.hasCircularReference(cat.id, new Set())) {
+        errors.push({
+          errorType: 'circular-reference',
+          message: `Die Kategorie "${cat.name}" ist Teil einer zirkulären Referenz`,
+          categoryId: cat.id
+        });
+      }
+    });
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  private hasCircularReference(categoryId: string, visited: Set<string>): boolean {
+    if (visited.has(categoryId)) {
+      return true;
+    }
+
+    visited.add(categoryId);
+    const category = this.categories.find(cat => cat.id === categoryId);
+    
+    if (category?.parentCategory) {
+      return this.hasCircularReference(category.parentCategory, visited);
+    }
+
+    return false;
   }
 }
 

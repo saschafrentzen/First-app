@@ -27,6 +27,17 @@ export interface OfflineChange {
   synced: boolean;
 }
 
+export interface CategoryBudget {
+  id: string;
+  category: string;
+  budget: number;
+  period: 'daily' | 'weekly' | 'monthly';
+  startDate: string;
+  endDate?: string;
+  currentSpent: number;
+  lastUpdated: string;
+}
+
 export interface StorageKeys {
   SHOPPING_LISTS: 'shopping_lists';
   OFFLINE_CHANGES: 'offline_changes';

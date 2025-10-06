@@ -11,7 +11,7 @@
     "lib": ["ES2019"],
     "types": ["react-native", "jest"],
     "moduleResolution": "node",
-    "module": "commonjs",
+    "module": "esnext",
     "noEmit": true,
     "target": "esnext",
     "skipLibCheck": true,
