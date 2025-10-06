@@ -1,0 +1,34 @@
+{
+  "project_info": {
+    "project_number": "309362127079",
+    "project_id": "shopping-scanner-app",
+    "storage_bucket": "shopping-scanner-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:309362127079:android:1add9d14cb8be708a2f242",
+        "android_client_info": {
+          "package_name": "com.shoppingscanner"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2y09hsGoyXgh8kF6cOkDUsW-FD3q5QuM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1",
+  "buildscript": {
+    "dependencies": [
+      "classpath('com.google.gms:google-services:4.3.15')"
+    ]
+  }
+}

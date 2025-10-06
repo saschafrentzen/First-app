@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Grundlegende Regel: Benutzer müssen authentifiziert sein
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Regeln für Einkaufslisten
+    match /shopping_lists/{listId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      
+      // Untersammlung für Produkte in einer Liste
+      match /items/{itemId} {
+        allow read, write: if request.auth != null && 
+          get(/databases/$(database)/documents/shopping_lists/$(listId)).data.userId == request.auth.uid;
+      }
+    }
+  }
+}
