@@ -141,9 +141,9 @@ export const CategoryList: React.FC<CategoryListProps> = ({
     onSelectCategory?.(category);
   };
 
-  const handleImportComplete = (result: { imported: number; skipped: number; errors: Array<{ id: string; error: string }> }) => {
+  const handleImportComplete = async (result: { imported: number; skipped: number; errors: Array<{ id: string; error: string }> }) => {
     if (result.imported > 0) {
-      categoryService.loadCategories();
+      await categoryService.reloadCategories();
     }
     setIsImportDialogVisible(false);
   };

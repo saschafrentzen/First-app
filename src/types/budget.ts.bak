@@ -1,0 +1,110 @@
+// Warnstufen für Budget-Benachrichtigungen
+export type Budgeexport interexport interface BudgetStatus {
+  categoryId: string;
+  period: BudgetPeriod;
+  startDate: string;
+  endDate: string;
+  limit: number;
+  spent: number;
+  remaining: number;
+  percentageSpent: number;
+  projectedOverspend: number | null;
+  lastChecked: string;
+  activeAlerts: BudgetAlert[];
+}atus {
+  categoryId: string;
+  period: BudgetPeriod;
+  startDate: string;
+  endDate: string;
+  limit: number;
+  spent: number;
+  remaining: number;
+  percentageSpent: number;
+  projectedOverspend: number | null;
+  lastChecked: string;
+  activeAlerts: BudgetAlert[];
+} 'info' | 'warning' | 'critical';
+
+// Häufigkeit der Überprüfung
+export type BudgetCheckFrequency = 'daily' | 'weekly' | 'monthly' | 'onTransaction';
+
+// Zeitraum für Budget-Berechnungen
+export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+// Budget-Kategorie
+export interface BudgetCategory {
+  id: string;
+  name: string;
+  limit: number;
+  spent: number;
+  period: BudgetPeriod;
+  alerts: BudgetAlert[];
+}
+
+// Budget-Warnung
+export interface BudgetAlert {
+  id: string;
+  type: BudgetAlertLevel;
+  threshold: number;  // Prozentsatz des Budgets (0-100)
+  message: string;
+  enabled: boolean;
+  notificationChannels: NotificationChannel[];
+}
+
+// Benachrichtigungskanal
+export type NotificationChannel = 'push' | 'inApp' | 'email';
+
+// Budget-Benachrichtigung
+export interface BudgetNotification {
+  id: string;
+  categoryId: string;
+  alertId: string;
+  timestamp: string;
+  type: BudgetAlertLevel;
+  message: string;
+  data: {
+    budgetLimit: number;
+    currentSpent: number;
+    threshold: number;
+    percentageSpent: number;
+  };
+  status: 'pending' | 'sent' | 'read' | 'dismissed';
+}
+
+// Budget-Einstellungen
+export interface BudgetSettings {
+  checkFrequency: BudgetCheckFrequency;
+  quietHours: {
+    enabled: boolean;
+    start: string;  // HH:mm
+    end: string;    // HH:mm
+  };
+  defaultAlerts: BudgetAlert[];
+  globalNotificationChannels: NotificationChannel[];
+}
+
+// Budget-Status
+export interface BudgetStatus {
+  categoryId: string;
+  period: BudgetPeriod;
+  startDate: string;
+  endDate: string;
+  limit: number;
+  spent: number;
+  remaining: number;
+  percentageSpent: number;
+  projectedOverspend: number | null;
+  lastChecked: string;
+  activeAlerts: string[];  // Alert IDs
+}
+
+// Budget-Prognose
+export interface BudgetForecast {
+  categoryId: string;
+  period: BudgetPeriod;
+  predictedSpend: number;
+  confidence: number;
+  trend: 'increasing' | 'stable' | 'decreasing';
+  riskLevel: 'low' | 'medium' | 'high';
+  recommendations: string[];
+}

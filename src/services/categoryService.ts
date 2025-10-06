@@ -242,6 +242,11 @@ class CategoryService {
     }
   }
 
+  // Öffentliche Methode zum Neuladen der Kategorien
+  async reloadCategories(): Promise<void> {
+    await this.loadCategories();
+  }
+
   private async saveCategories() {
     try {
       const data = Object.fromEntries(this.categories);
