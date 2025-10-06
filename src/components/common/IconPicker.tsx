@@ -4,9 +4,9 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  StyleSheet,
-  Modal,
+  StyleSheet
 } from 'react-native';
+import { Modal } from '../Modal';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface IconPickerProps {
@@ -53,12 +53,10 @@ const IconPicker: React.FC<IconPickerProps> = ({
 
       <Modal
         visible={modalVisible}
+        onClose={() => setModalVisible(false)}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        contentStyle={styles.modalContent}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Icon auswählen</Text>
               <TouchableOpacity
@@ -92,8 +90,6 @@ const IconPicker: React.FC<IconPickerProps> = ({
                 ))}
               </View>
             </ScrollView>
-          </View>
-        </View>
       </Modal>
     </View>
   );
@@ -115,18 +111,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
   modalContent: {
-    width: '90%',
+    width: '100%',
     maxHeight: '80%',
     backgroundColor: '#fff',
     borderRadius: 12,
     overflow: 'hidden',
+    padding: 0,
   },
   modalHeader: {
     flexDirection: 'row',

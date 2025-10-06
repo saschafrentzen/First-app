@@ -1,0 +1,745 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  BudgetCategory,
+  BudgetAlert,
+  BudgetStatus,
+  BudgetSettings,
+  BudgetNotification,
+  BudgetForecast,
+  BudgetAdjustment,
+  BudgetAdjustmentHistory,
+  BudgetCheckFrequency,
+  NotificationChannel 
+} from '../types/budget';
+import { notificationService } from './notification.service';
+import { budgetAdjustmentService } from './budget-adjustment.service';
+
+class BudgetService {
+  private static instance: BudgetService;
+  private categories: Map<string, BudgetCategory> = new Map();
+  private settings: BudgetSettings | null = null;
+  private notifications: Map<string, BudgetNotification> = new Map();
+  private checkInterval: NodeJS.Timeout | null = null;
+
+  private constructor() {
+    this.loadData();
+    this.initializeCheckInterval();
+  }
+
+  static getInstance(): BudgetService {
+    if (!BudgetService.instance) {
+      BudgetService.instance = new BudgetService();
+    }
+    return BudgetService.instance;
+  }
+
+  // Budget-Kategorien Management
+  async addCategory(category: Omit<BudgetCategory, 'id'>): Promise<BudgetCategory> {
+    const newCategory: BudgetCategory = {
+      ...category,
+      id: `category_${Date.now()}`,
+      spent: 0,
+      alerts: this.settings?.defaultAlerts || []
+    };
+
+    this.categories.set(newCategory.id, newCategory);
+    await this.saveCategories();
+    return newCategory;
+  }
+
+  async updateCategory(id: string, updates: Partial<BudgetCategory>): Promise<BudgetCategory> {
+    const category = this.categories.get(id);
+    if (!category) throw new Error('Kategorie nicht gefunden');
+
+    const updatedCategory = { ...category, ...updates };
+    this.categories.set(id, updatedCategory);
+    await this.saveCategories();
+    return updatedCategory;
+  }
+
+  // Budget-Vorschläge
+  async applyBudgetSuggestion(categoryId: string, suggestion: BudgetSuggestion): Promise<BudgetCategory> {
+    const category = this.categories.get(categoryId);
+    if (!category) throw new Error('Kategorie nicht gefunden');
+
+    const adjustment: BudgetAdjustment = {
+      categoryId,
+      oldLimit: category.limit,
+      newLimit: suggestion.amount,
+      reason: suggestion.reason,
+      date: new Date().toISOString()
+    };
+
+    // Speichere die Anpassung in der Historie
+    await budgetAdjustmentService.saveAdjustment(adjustment);
+
+    // Aktualisiere das Budget
+    const updatedCategory = await this.updateCategory(categoryId, {
+      limit: suggestion.amount
+    });
+
+    // Sende eine Benachrichtigung über die Anpassung
+    const percentageChange = ((adjustment.newLimit - adjustment.oldLimit) / adjustment.oldLimit) * 100;
+    const direction = percentageChange > 0 ? 'erhöht' : 'reduziert';
+    const notification: BudgetNotification = {
+      id: `budget_adjustment_${Date.now()}`,
+      categoryId: adjustment.categoryId,
+      alertId: 'budget_adjustment',
+      timestamp: new Date().toISOString(),
+      type: 'info',
+      message: `Das Budget für ${category.name} wurde ${direction} (${Math.abs(percentageChange).toFixed(1)}%)`,
+      data: {
+        budgetLimit: adjustment.newLimit,
+        currentSpent: category.spent,
+        threshold: 0,
+        percentageSpent: (category.spent / adjustment.newLimit) * 100
+      },
+      status: 'pending'
+    };
+
+    await notificationService.sendNotification(notification);
+
+    return updatedCategory;
+  }
+
+  // Persistenz
+  private async loadData(): Promise<void> {
+    await Promise.all([
+      this.loadCategories(),
+      this.loadSettings(),
+      this.loadNotifications()
+    ]);
+  }
+
+  private async loadCategories(): Promise<void> {
+    try {
+      const data = await AsyncStorage.getItem('budget_categories');
+      if (data) {
+        const categories = JSON.parse(data);
+        this.categories = new Map(Object.entries(categories));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Kategorien:', error);
+    }
+  }
+
+  private async saveCategories(): Promise<void> {
+    try {
+      const data = Object.fromEntries(this.categories);
+      await AsyncStorage.setItem('budget_categories', JSON.stringify(data));
+    } catch (error) {
+      console.error('Fehler beim Speichern der Budget-Kategorien:', error);
+    }
+  }
+
+  private async loadSettings(): Promise<void> {
+    try {
+      const data = await AsyncStorage.getItem('budget_settings');
+      if (data) {
+        this.settings = JSON.parse(data);
+      } else {
+        // Initialisiere Standardeinstellungen
+        this.settings = {
+          checkFrequency: 'daily',
+          quietHours: {
+            enabled: true,
+            start: '22:00',
+            end: '07:00'
+          },
+          defaultAlerts: [
+            {
+              id: 'default_warning',
+              type: 'warning',
+              threshold: 80,
+              message: 'Sie haben {percentage}% Ihres Budgets verbraucht.',
+              enabled: true,
+              notificationChannels: ['push', 'inApp']
+            },
+            {
+              id: 'default_critical',
+              type: 'critical',
+              threshold: 95,
+              message: 'Achtung: {percentage}% des Budgets verbraucht!',
+              enabled: true,
+              notificationChannels: ['push', 'inApp', 'email']
+            }
+          ],
+          globalNotificationChannels: ['push', 'inApp']
+        };
+        await this.saveSettings();
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Einstellungen:', error);
+    }
+  }
+        };
+        await this.saveSettings();
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Einstellungen:', error);
+    }
+  }
+
+  // Budget-Vorschläge Verwaltung
+  async applyBudgetSuggestion(categoryId: string, suggestion: BudgetSuggestion): Promise<BudgetCategory> {
+    const category = this.categories.get(categoryId);
+    if (!category) throw new Error('Kategorie nicht gefunden');
+
+    const adjustment: BudgetAdjustment = {
+      categoryId,
+      oldLimit: category.limit,
+      newLimit: suggestion.amount,
+      reason: suggestion.reason,
+      date: new Date().toISOString(),
+      confidence: suggestion.confidence
+    };
+
+    // Speichere die Anpassung in der Historie
+    await this.saveBudgetAdjustment(adjustment);
+
+    // Aktualisiere das Budget
+    const updatedCategory = await this.updateCategory(categoryId, {
+      limit: suggestion.amount
+    });
+
+    // Sende eine Benachrichtigung über die Anpassung
+    await this.notifyBudgetAdjustment(adjustment);
+
+    return updatedCategory;
+  }
+
+  private async saveBudgetAdjustment(adjustment: BudgetAdjustment): Promise<void> {
+    try {
+      // Lade bestehende Anpassungshistorie
+      const historyData = await AsyncStorage.getItem(`budget_adjustments_${adjustment.categoryId}`);
+      const history: BudgetAdjustment[] = historyData ? JSON.parse(historyData) : [];
+
+      // Füge neue Anpassung hinzu
+      history.push(adjustment);
+
+      // Speichere aktualisierte Historie
+      await AsyncStorage.setItem(
+        `budget_adjustments_${adjustment.categoryId}`,
+        JSON.stringify(history)
+      );
+    } catch (error) {
+      console.error('Fehler beim Speichern der Budget-Anpassung:', error);
+      throw error;
+    }
+  }
+
+  private async notifyBudgetAdjustment(adjustment: BudgetAdjustment): Promise<void> {
+    const category = this.categories.get(adjustment.categoryId);
+    if (!category) return;
+
+    const percentageChange = ((adjustment.newLimit - adjustment.oldLimit) / adjustment.oldLimit) * 100;
+    const direction = percentageChange > 0 ? 'erhöht' : 'reduziert';
+    const notification: BudgetNotification = {
+      id: `budget_adjustment_${Date.now()}`,
+      categoryId: adjustment.categoryId,
+      alertId: 'budget_adjustment',
+      timestamp: new Date().toISOString(),
+      type: 'info',
+      message: `Das Budget für ${category.name} wurde ${direction} (${Math.abs(percentageChange).toFixed(1)}%)`,
+      data: {
+        budgetLimit: adjustment.newLimit,
+        currentSpent: category.spent,
+        threshold: 0,
+        percentageSpent: (category.spent / adjustment.newLimit) * 100
+      },
+      status: 'pending'
+    };
+
+    await notificationService.sendNotification(notification);
+  }
+
+  async getBudgetAdjustmentHistory(categoryId: string): Promise<BudgetAdjustmentHistory[]> {
+    try {
+      const historyData = await AsyncStorage.getItem(`budget_adjustments_${categoryId}`);
+      return historyData ? JSON.parse(historyData) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Anpassungshistorie:', error);
+      return [];
+    }
+  }
+
+  private async loadSettings(): Promise<void> {
+    try {
+      const data = await AsyncStorage.getItem('budget_settings');
+      if (data) {
+        this.settings = JSON.parse(data);
+      } else {
+        // Default settings
+        this.settings = {
+          checkFrequency: 'daily' as BudgetCheckFrequency,
+          quietHours: {
+            enabled: true,
+            start: '22:00',
+            end: '07:00'
+          },
+          defaultAlerts: [
+            {
+              id: 'default_warning',
+              type: 'warning',
+              threshold: 80,
+              message: 'Sie haben {percentage}% Ihres Budgets verbraucht.',
+              enabled: true,
+              notificationChannels: ['push', 'inApp']
+            },
+            {
+              id: 'default_critical',
+              type: 'critical',
+              threshold: 95,
+              message: 'Achtung: {percentage}% des Budgets verbraucht!',
+              enabled: true,
+              notificationChannels: ['push', 'inApp', 'email']
+            }
+          ],
+          globalNotificationChannels: ['push', 'inApp']
+        };
+        await this.saveSettings();
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Einstellungen:', error);
+    }
+  }
+
+  private async saveSettings(): Promise<void> {
+    try {
+      await AsyncStorage.setItem('budget_settings', JSON.stringify(this.settings));
+    } catch (error) {
+      console.error('Fehler beim Speichern der Budget-Einstellungen:', error);
+    }
+  }
+
+  private async loadNotifications(): Promise<void> {
+    try {
+      const data = await AsyncStorage.getItem('budget_notifications');
+      if (data) {
+        const notifications = JSON.parse(data);
+        this.notifications = new Map(Object.entries(notifications));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Benachrichtigungen:', error);
+    }
+  }
+
+  // Budget-Status und Prüfungen
+  private async checkBudgets(): Promise<void> {
+    if (!await this.shouldCheck()) return;
+
+    for (const category of this.categories.values()) {
+      const status = await this.calculateBudgetStatus(category);
+      await this.checkAlerts(category, status);
+    }
+  }
+
+  private async shouldCheck(): Promise<boolean> {
+    if (!this.settings) return false;
+    
+    const now = new Date();
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTime = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+    // Prüfe Ruhezeiten
+    if (this.settings.quietHours.enabled) {
+      const start = this.settings.quietHours.start;
+      const end = this.settings.quietHours.end;
+      if (currentTime >= start || currentTime <= end) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private async calculateBudgetStatus(category: BudgetCategory): Promise<BudgetStatus> {
+    const now = new Date();
+    const { startDate, endDate } = this.getPeriodDates(category.period, now);
+
+    const activeAlerts = category.alerts.filter(alert => 
+      alert.enabled && ((category.spent / category.limit) * 100) >= alert.threshold
+    );
+
+    const status: BudgetStatus = {
+      categoryId: category.id,
+      period: category.period,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      limit: category.limit,
+      spent: category.spent,
+      remaining: category.limit - category.spent,
+      percentageSpent: (category.spent / category.limit) * 100,
+      projectedOverspend: await this.calculateProjectedOverspend(category),
+      lastChecked: now.toISOString(),
+      activeAlerts
+    };
+
+    return status;
+  }
+
+  private getPeriodDates(period: string, date: Date): { startDate: Date; endDate: Date } {
+    const startDate = new Date(date);
+    const endDate = new Date(date);
+
+    switch (period) {
+      case 'weekly':
+        startDate.setDate(date.getDate() - date.getDay());
+        endDate.setDate(startDate.getDate() + 6);
+        break;
+      case 'monthly':
+        startDate.setDate(1);
+        endDate.setMonth(date.getMonth() + 1);
+        endDate.setDate(0);
+        break;
+      case 'yearly':
+        startDate.setMonth(0, 1);
+        endDate.setMonth(11, 31);
+        break;
+    }
+
+    return { startDate, endDate };
+  }
+
+  private async calculateProjectedOverspend(category: BudgetCategory): Promise<number | null> {
+    try {
+      const spendingHistory = await this.getHistoricalSpending(category.id);
+      if (spendingHistory.length < 3) return null;
+
+      // Berechne durchschnittliche tägliche Ausgaben
+      const dailySpending = spendingHistory.reduce((total, entry) => total + entry.spent, 0) / 
+        (spendingHistory.length * 30); // Annahme: durchschnittlich 30 Tage pro Monat
+
+      const now = new Date();
+      const { endDate } = this.getPeriodDates(category.period, now);
+      const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      const projectedTotal = category.spent + (dailySpending * daysRemaining);
+      return projectedTotal > category.limit ? projectedTotal - category.limit : 0;
+    } catch (error) {
+      console.error('Fehler bei der Berechnung der projizierten Überschreitung:', error);
+      return null;
+    }
+  }
+
+  private async checkAlerts(category: BudgetCategory, status: BudgetStatus): Promise<void> {
+    for (const alert of status.activeAlerts) {
+      // Prüfe, ob die Benachrichtigung bereits gesendet wurde
+      const notificationKey = `${category.id}_${alert.id}_${status.period}`;
+      if (this.notifications.has(notificationKey)) continue;
+
+      // Erstelle und speichere Benachrichtigung
+      const notification: BudgetNotification = {
+        id: notificationKey,
+        alertId: alert.id,
+        type: alert.type,
+        message: alert.message.replace('{percentage}', Math.floor(status.percentageSpent).toString()),
+        timestamp: new Date().toISOString(),
+        categoryId: category.id,
+        data: {
+          budgetLimit: category.limit,
+          currentSpent: category.spent,
+          threshold: alert.threshold,
+          percentageSpent: status.percentageSpent
+        }, // Add any relevant data here if needed
+        status: 'pending' // Or use the appropriate status value
+      };
+
+      this.notifications.set(notification.id, notification);
+      await this.saveNotifications();
+
+      // Sende Benachrichtigung über die konfigurierten Kanäle
+      const channels = alert.notificationChannels.filter(channel => 
+        this.settings?.globalNotificationChannels.includes(channel)
+      );
+
+      if (channels.length > 0) {
+        await notificationService.send(notification, channels);
+      }
+    }
+  }
+
+  // Automatische Budget-Anpassungen
+  async calculateBudgetAdjustment(categoryId: string): Promise<BudgetAdjustment | null> {
+    try {
+      const category = this.categories.get(categoryId);
+      if (!category) return null;
+
+      const historicalData = await this.getHistoricalSpending(categoryId);
+      if (historicalData.length < 3) return null;
+
+      // Analysiere historische Trends
+      const trends = this.analyzeHistoricalTrends(historicalData);
+      
+      // Berücksichtige Saisonalität
+      const seasonalityFactor = this.detectSeasonalPattern(historicalData);
+      
+      // Berechne durchschnittliche monatliche Ausgaben
+      const avgMonthlySpending = this.calculateAverageMonthlySpending(historicalData);
+      
+      // Identifiziere Einflussfaktoren
+      const factors = [
+        { name: 'Historischer Trend', impact: trends.trendStrength },
+        { name: 'Saisonale Effekte', impact: seasonalityFactor }
+      ];
+
+      if (Math.abs(trends.monthOverMonthGrowth) > 0.1) {
+        factors.push({
+          name: 'Starkes Wachstum',
+          impact: Math.abs(trends.monthOverMonthGrowth)
+        });
+      }
+
+      // Berechne vorgeschlagenes neues Limit
+      const baseAdjustment = avgMonthlySpending * (1 + trends.monthOverMonthGrowth);
+      const seasonalAdjustment = baseAdjustment * (1 + seasonalityFactor);
+      const suggestedLimit = Math.max(
+        category.limit * 0.5, // Nicht mehr als 50% reduzieren
+        Math.min(category.limit * 1.5, seasonalAdjustment) // Nicht mehr als 50% erhöhen
+      );
+
+      // Bestimme Grund für Anpassung
+      let reason = '';
+      if (suggestedLimit > category.limit) {
+        reason = 'Basierend auf Ihren historischen Ausgaben und aktuellen Trends empfehlen wir eine Erhöhung des Budgets.';
+      } else if (suggestedLimit < category.limit) {
+        reason = 'Ihre Ausgaben liegen konstant unter dem Budget. Eine Reduzierung könnte zu besserem Finanzmanagement führen.';
+      }
+
+      // Berechne Konfidenz
+      const confidence = this.calculateAdjustmentConfidence(historicalData, trends);
+
+      return { 
+        categoryId,
+        suggestedLimit, 
+        reason, 
+        confidence, 
+        factors,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Fehler bei der Berechnung der Budget-Anpassung:', error);
+      return null;
+    }
+  }
+
+  private async getHistoricalSpending(categoryId: string): Promise<Array<{ period: string; spent: number }>> {
+    try {
+      const key = `spending_history_${categoryId}`;
+      const data = await AsyncStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Ausgabenhistorie:', error);
+      return [];
+    }
+  }
+
+  private analyzeHistoricalTrends(data: Array<{ period: string; spent: number }>) {
+    const monthlyAverages = new Map<string, { total: number; count: number }>();
+    
+    // Gruppiere Ausgaben nach Monat
+    data.forEach(entry => {
+      const date = new Date(entry.period);
+      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+      const current = monthlyAverages.get(monthKey) || { total: 0, count: 0 };
+      monthlyAverages.set(monthKey, {
+        total: current.total + entry.spent,
+        count: current.count + 1
+      });
+    });
+
+    // Berechne monatliche Durchschnitte
+    const monthlySpending = Array.from(monthlyAverages.entries())
+      .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
+      .map(([_, value]) => value.total / value.count);
+
+    // Berechne monatliche Wachstumsrate
+    const monthlyGrowth = [];
+    for (let i = 1; i < monthlySpending.length; i++) {
+      monthlyGrowth.push(
+        (monthlySpending[i] - monthlySpending[i-1]) / monthlySpending[i-1]
+      );
+    }
+
+    const avgMonthlyGrowth = monthlyGrowth.reduce((a, b) => a + b, 0) / monthlyGrowth.length;
+    const growthVariance = monthlyGrowth.reduce(
+      (variance, growth) => variance + Math.pow(growth - avgMonthlyGrowth, 2),
+      0
+    ) / monthlyGrowth.length;
+
+    return {
+      monthOverMonthGrowth: avgMonthlyGrowth,
+      trendStrength: 1 - Math.min(1, Math.sqrt(growthVariance))
+    };
+  }
+
+  private calculateAverageMonthlySpending(data: Array<{ period: string; spent: number }>): number {
+    if (data.length === 0) return 0;
+
+    const monthlyTotals = new Map<string, number>();
+    
+    data.forEach(entry => {
+      const date = new Date(entry.period);
+      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+      const current = monthlyTotals.get(monthKey) || 0;
+      monthlyTotals.set(monthKey, current + entry.spent);
+    });
+
+    const total = Array.from(monthlyTotals.values()).reduce((sum, value) => sum + value, 0);
+    return total / monthlyTotals.size;
+  }
+
+  private calculateAdjustmentConfidence(
+    historicalData: Array<{ period: string; spent: number }>,
+    trends: { monthOverMonthGrowth: number; trendStrength: number }
+  ): number {
+    const factors = [];
+
+    // 1. Datenmenge (max. 25%)
+    const dataScore = Math.min(historicalData.length / 12, 1) * 25;
+    factors.push(dataScore);
+
+    // 2. Trendstärke (max. 25%)
+    const trendScore = trends.trendStrength * 25;
+    factors.push(trendScore);
+
+    // 3. Konsistenz der Ausgaben (max. 25%)
+    const volatility = this.calculateVolatility(historicalData);
+    const consistencyScore = (1 - Math.min(volatility, 1)) * 25;
+    factors.push(consistencyScore);
+
+    // 4. Saisonale Muster (max. 25%)
+    const seasonalScore = this.detectSeasonalPattern(historicalData) * 25;
+    factors.push(seasonalScore);
+
+    // Gesamtkonfidenz (0-100%)
+    return factors.reduce((sum, score) => sum + score, 0);
+  }
+
+  private calculateVolatility(historicalData: Array<{ period: string; spent: number }>): number {
+    if (historicalData.length < 2) return 1;
+    
+    const values = historicalData.map(d => d.spent);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    
+    return Math.sqrt(variance) / mean;
+  }
+
+  private detectSeasonalPattern(historicalData: Array<{ period: string; spent: number }>): number {
+    if (historicalData.length < 12) return 0;
+    
+    const monthlyAverages = new Array(12).fill(0);
+    const monthCounts = new Array(12).fill(0);
+    
+    historicalData.forEach(data => {
+      const date = new Date(data.period);
+      const month = date.getMonth();
+      monthlyAverages[month] += data.spent;
+      monthCounts[month]++;
+    });
+
+    for (let i = 0; i < 12; i++) {
+      if (monthCounts[i] > 0) {
+        monthlyAverages[i] /= monthCounts[i];
+      }
+    }
+
+    const overallAverage = monthlyAverages.reduce((a, b) => a + b, 0) / 12;
+    const seasonalityScore = monthlyAverages.reduce(
+      (score, avg) => score + Math.abs(avg - overallAverage) / overallAverage,
+      0
+    ) / 12;
+
+    return seasonalityScore;
+  }
+
+  async applyBudgetAdjustment(categoryId: string, newLimit: number): Promise<BudgetCategory | null> {
+    try {
+      const category = this.categories.get(categoryId);
+      if (!category) return null;
+
+      // Speichere alte Einstellung für Verlauf
+      await this.saveBudgetAdjustmentHistory(categoryId, {
+        timestamp: new Date().toISOString(),
+        oldLimit: category.limit,
+        newLimit: newLimit,
+        reason: 'Automatische Anpassung basierend auf Ausgabenanalyse'
+      });
+
+      // Aktualisiere Budget-Limit
+      return this.updateCategory(categoryId, { limit: newLimit });
+    } catch (error) {
+      console.error('Fehler bei der Anwendung der Budget-Anpassung:', error);
+      return null;
+    }
+  }
+
+  private async saveBudgetAdjustmentHistory(categoryId: string, adjustment: BudgetAdjustmentHistory): Promise<void> {
+    try {
+      const key = `budget_adjustments_${categoryId}`;
+      const existingData = await AsyncStorage.getItem(key);
+      const adjustments = existingData ? JSON.parse(existingData) : [];
+      
+      adjustments.push(adjustment);
+      
+      await AsyncStorage.setItem(key, JSON.stringify(adjustments));
+    } catch (error) {
+      console.error('Fehler beim Speichern der Budget-Anpassungshistorie:', error);
+    }
+  }
+
+  async getBudgetAdjustmentHistory(categoryId: string): Promise<BudgetAdjustmentHistory[]> {
+    try {
+      const key = `budget_adjustments_${categoryId}`;
+      const data = await AsyncStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Anpassungshistorie:', error);
+      return [];
+    }
+  }
+
+  // Hilfsmethoden
+  private formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount);
+  }
+
+  getCategories(): Map<string, BudgetCategory> {
+    return this.categories;
+  }
+
+  getNotifications(): Map<string, BudgetNotification> {
+    return this.notifications;
+  }
+
+  async getCategoryStatus(categoryId: string): Promise<BudgetStatus | null> {
+    const category = this.categories.get(categoryId);
+    if (!category) return null;
+    return this.calculateBudgetStatus(category);
+  }
+
+  private initializeCheckInterval(): void {
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+    }
+
+    // Prüfe Budgets alle 15 Minuten
+    this.checkInterval = setInterval(() => this.checkBudgets(), 15 * 60 * 1000);
+  }
+
+  private async saveNotifications(): Promise<void> {
+    try {
+      const data = Object.fromEntries(this.notifications);
+      await AsyncStorage.setItem('budget_notifications', JSON.stringify(data));
+    } catch (error) {
+      console.error('Fehler beim Speichern der Budget-Benachrichtigungen:', error);
+    }
+  }
+}
+
+export const budgetService = BudgetService.getInstance();

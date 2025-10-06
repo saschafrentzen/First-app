@@ -1,9 +1,14 @@
+import { IconName } from './icons';
+
 // Enums & Types
 export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
-export type BudgetAlertType = 'warning' | 'critical';
+export type BudgetSuggestionType = 'trend' | 'volatility' | 'seasonal' | 'recurring' | 'benchmark' | 'goal';
+export type BudgetSuggestionAction = 'increase' | 'decrease' | 'adjust';
+export type BudgetSuggestionImpact = 'low' | 'medium' | 'high';
+export type BudgetAlertType = 'warning' | 'critical' | 'info';
 export type BudgetCheckFrequency = 'daily' | 'weekly' | 'monthly' | 'onTransaction';
 export type NotificationChannel = 'push' | 'inApp' | 'email';
-export type NotificationStatus = 'pending' | 'sent' | 'failed';
+export type NotificationStatus = 'pending' | 'sent' | 'failed' | 'read';
 
 // Interfaces
 export interface BudgetCategory {
@@ -13,6 +18,8 @@ export interface BudgetCategory {
   spent: number;
   period: BudgetPeriod;
   alerts: BudgetAlert[];
+  icon?: IconName;
+  color?: string;
 }
 
 export interface BudgetAlert {
@@ -49,6 +56,15 @@ export interface BudgetSettings {
   globalNotificationChannels: NotificationChannel[];
 }
 
+export interface BudgetSuggestion {
+  type: BudgetSuggestionType;
+  action: BudgetSuggestionAction;
+  amount: number;
+  reason: string;
+  confidence: number;
+  impact: BudgetSuggestionImpact;
+}
+
 export interface BudgetNotification {
   id: string;
   categoryId: string;
@@ -79,4 +95,27 @@ export interface BudgetForecast {
     message: string;
     potentialSavings: number;
   }[];
+}
+
+// Gelöscht: Doppelte Definition von BudgetSuggestion
+
+export interface BudgetAdjustment {
+  categoryId: string;
+  oldLimit: number;
+  newLimit: number;
+  reason: string;
+  date: string;
+  suggestedLimit?: number;
+  confidence?: number;
+  factors?: {
+    name: string;
+    impact: number;
+  }[];
+}
+
+export interface BudgetAdjustmentHistory {
+  timestamp: string;
+  oldLimit: number;
+  newLimit: number;
+  reason: string;
 }

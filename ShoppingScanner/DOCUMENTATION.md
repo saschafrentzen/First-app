@@ -80,18 +80,32 @@ src/
 - Hierarchische Kategoriestruktur
 - Farbcodierung
 - Icon-Auswahl
+- Import/Export von Kategorien
+- Mehrsprachige Kategorie-Templates
+- Intelligente Kategorievorschläge
+- Erweiterte Verwaltungsoptionen
 
 ### 4. Budget-Verwaltung
 - Kategorie-basierte Budgets
 - Ausgabenverfolgung
 - Budget-Warnungen
 - Periodenbasierte Auswertung (täglich/wöchentlich/monatlich)
+- Push-Benachrichtigungen
+- KI-basierte Prognosen
+- Automatische Anpassungen
+- Intelligente Budgetvorschläge
+- Preis-Tracking und Alarme
 
 ### 5. Ernährungstracking
 - Nährwertinformationen
 - Tägliche Übersichten
 - Zielvorgaben
 - Trendanalysen
+- Persönliche Zieldefinition
+- KI-basierte Ernährungsanalyse
+- Saisonale Ernährungstipps
+- Fortschrittsverfolgung
+- Personalisierte Empfehlungen
 
 ### 6. Export- und Backup-System
 - Flexible Datenexporte in mehreren Formaten
@@ -524,22 +538,20 @@ npx expo start
 ## Zukünftige Entwicklung
 
 Geplante Features:
-1. Benutzerdefinierte Kategorien
-   - Erweiterte Verwaltungsmöglichkeiten
-   - Import/Export von Kategorien
-   - Mehrsprachige Kategorie-Templates
-   - Kategorievorschläge basierend auf Kaufhistorie
+1. Erweiterte Datenschutz-Features
+   - Ende-zu-Ende-Verschlüsselung für alle Daten
+   - Biometrische Authentifizierung
+   - Erweiterte Datenschutzeinstellungen
+   - DSGVO-Compliance-Tools
 
-2. Ernährungsziele-System
-   - Persönliche Zieldefinition
-   - Fortschrittsverfolgung
-   - Empfehlungen
-   - KI-basierte Ernährungsanalyse
-   - Saisonale Ernährungstipps
+2. Soziale Features
+   - Einkaufslisten teilen
+   - Gemeinsame Haushaltsverwaltung
+   - Rezeptaustausch
+   - Community-Preisvergleiche
 
-3. Budget-Warnsystem
-   - Push-Benachrichtigungen
-   - Prognosen
-   - Automatische Anpassungen
-   - Intelligente Budgetvorschläge
-   - Preis-Tracking und Alarme
+3. Smart Home Integration
+   - Anbindung an Smart-Kühlschränke
+   - Sprachassistenten-Integration
+   - Automatische Nachbestellung
+   - IoT-Gerätesynchronisation

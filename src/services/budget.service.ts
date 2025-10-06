@@ -6,10 +6,14 @@ import {
   BudgetSettings,
   BudgetNotification,
   BudgetForecast,
+  BudgetAdjustment,
+  BudgetAdjustmentHistory,
   BudgetCheckFrequency,
-  NotificationChannel 
+  NotificationChannel,
+  BudgetSuggestion
 } from '../types/budget';
 import { notificationService } from './notification.service';
+import { budgetAdjustmentService } from './budget-adjustment.service';
 
 class BudgetService {
   private static instance: BudgetService;
@@ -54,192 +58,53 @@ class BudgetService {
     return updatedCategory;
   }
 
-  // Budget-Einstellungen
-  async updateSettings(updates: Partial<BudgetSettings>): Promise<BudgetSettings> {
-    this.settings = { ...this.settings!, ...updates };
-    await this.saveSettings();
-    this.initializeCheckInterval();
-    return this.settings;
-  }
-
-  // Budget-Status und Prüfungen
-  async checkBudgets(): Promise<void> {
-    if (!await this.shouldCheck()) return;
-
-    for (const category of this.categories.values()) {
-      const status = await this.calculateBudgetStatus(category);
-      await this.checkAlerts(category, status);
-    }
-  }
-
-  private async calculateBudgetStatus(category: BudgetCategory): Promise<BudgetStatus> {
-    const now = new Date();
-    const { startDate, endDate } = this.getPeriodDates(category.period, now);
-
-    const activeAlerts = category.alerts.filter(alert => 
-      alert.enabled && ((category.spent / category.limit) * 100) >= alert.threshold
-    );
-
-    const status: BudgetStatus = {
-      categoryId: category.id,
-      period: category.period,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      limit: category.limit,
-      spent: category.spent,
-      remaining: category.limit - category.spent,
-      percentageSpent: (category.spent / category.limit) * 100,
-      projectedOverspend: await this.calculateProjectedOverspend(category),
-      lastChecked: now.toISOString(),
-      activeAlerts
-    };
-
-    return status;
-  }
-
-  private async checkAlerts(category: BudgetCategory, status: BudgetStatus): Promise<void> {
-    for (const alert of category.alerts) {
-      if (!alert.enabled) continue;
-
-      if (status.percentageSpent >= alert.threshold) {
-        await this.createNotification(category, alert, status);
-      }
-    }
-  }
-
-  private async createNotification(
-    category: BudgetCategory,
-    alert: BudgetAlert,
-    status: BudgetStatus
-  ): Promise<void> {
-    const notification: BudgetNotification = {
-      id: `notification_${Date.now()}`,
-      categoryId: category.id,
-      alertId: alert.id,
-      timestamp: new Date().toISOString(),
-      type: alert.type,
-      message: this.formatAlertMessage(alert, status),
-      data: {
-        budgetLimit: status.limit,
-        currentSpent: status.spent,
-        threshold: alert.threshold,
-        percentageSpent: status.percentageSpent
-      },
-      status: 'pending'
-    };
-
-    this.notifications.set(notification.id, notification);
-    await this.saveNotifications();
-
-    // Sende Benachrichtigungen über alle aktivierten Kanäle
-    for (const channel of alert.notificationChannels) {
-      await this.sendNotification(notification, channel);
-    }
-  }
-
-  private async sendNotification(
-    notification: BudgetNotification,
-    channel: NotificationChannel
-  ): Promise<void> {
-    try {
-      switch (channel) {
-        case 'push':
-          await notificationService.sendPushNotification({
-            title: `Budget-Warnung: ${notification.type.toUpperCase()}`,
-            body: notification.message,
-            data: notification.data
-          });
-          break;
-        case 'inApp':
-          await notificationService.sendInAppNotification(notification);
-          break;
-        case 'email':
-          // E-Mail-Benachrichtigung implementieren
-          break;
-      }
-
-      notification.status = 'sent';
-      await this.saveNotifications();
-    } catch (error) {
-      console.error(`Fehler beim Senden der ${channel}-Benachrichtigung:`, error);
-    }
-  }
-
-  // Öffentliche Zugriffsmethoden
-  getCategories(): Map<string, BudgetCategory> {
-    return this.categories;
-  }
-
-  getNotifications(): Map<string, BudgetNotification> {
-    return this.notifications;
-  }
-
-  async getCategoryStatus(categoryId: string): Promise<BudgetStatus | null> {
+  // Budget-Vorschläge
+  async applyBudgetSuggestion(categoryId: string, suggestion: BudgetSuggestion): Promise<BudgetCategory> {
     const category = this.categories.get(categoryId);
-    if (!category) return null;
-    return this.calculateBudgetStatus(category);
-  }
+    if (!category) throw new Error('Kategorie nicht gefunden');
 
-  // Hilfsmethoden
-  private async shouldCheck(): Promise<boolean> {
-    if (!this.settings) return false;
+    const adjustment: BudgetAdjustment = {
+      categoryId,
+      oldLimit: category.limit,
+      newLimit: suggestion.amount,
+      reason: suggestion.reason,
+      date: new Date().toISOString(),
+      confidence: suggestion.confidence
+    };
 
-    const now = new Date();
-    const lastCheck = await this.getLastCheckTime();
+    // Speichere die Anpassung in der Historie
+    await budgetAdjustmentService.saveAdjustment(adjustment);
 
-    if (!lastCheck) return true;
+    // Aktualisiere das Budget
+    const updatedCategory = await this.updateCategory(categoryId, {
+      limit: suggestion.amount
+    });
 
-    switch (this.settings.checkFrequency) {
-      case 'daily':
-        return (now.getTime() - lastCheck.getTime()) >= 24 * 60 * 60 * 1000;
-      case 'weekly':
-        return (now.getTime() - lastCheck.getTime()) >= 7 * 24 * 60 * 60 * 1000;
-      case 'monthly':
-        return now.getMonth() !== lastCheck.getMonth();
-      case 'onTransaction':
-        return true;
-      default:
-        return false;
-    }
-  }
+    // Speichere die Anpassung in der lokalen Historie
+    await this.saveBudgetAdjustmentHistory(categoryId, {
+      timestamp: new Date().toISOString(),
+      oldLimit: adjustment.oldLimit,
+      newLimit: adjustment.newLimit,
+      reason: adjustment.reason
+    });
 
-  private getPeriodDates(period: BudgetCategory['period'], date: Date): { startDate: Date, endDate: Date } {
-    const startDate = new Date(date);
-    const endDate = new Date(date);
-
-    switch (period) {
-      case 'daily':
-        startDate.setHours(0, 0, 0, 0);
-        endDate.setHours(23, 59, 59, 999);
-        break;
-      case 'weekly':
-        startDate.setDate(date.getDate() - date.getDay());
-        endDate.setDate(startDate.getDate() + 6);
-        break;
-      case 'monthly':
-        startDate.setDate(1);
-        endDate.setMonth(startDate.getMonth() + 1, 0);
-        break;
-      case 'yearly':
-        startDate.setMonth(0, 1);
-        endDate.setMonth(11, 31);
-        break;
-    }
-
-    return { startDate, endDate };
-  }
-
-  private formatAlertMessage(alert: BudgetAlert, status: BudgetStatus): string {
-    return alert.message
-      .replace('{percentage}', status.percentageSpent.toFixed(1))
-      .replace('{spent}', status.spent.toFixed(2))
-      .replace('{remaining}', status.remaining.toFixed(2))
-      .replace('{limit}', status.limit.toFixed(2));
-  }
-
-  private async calculateProjectedOverspend(category: BudgetCategory): Promise<number | null> {
-    // Implementiere Prognoselogik basierend auf historischen Daten
-    return null;
+    // Benachrichtigung senden
+    const percentageChange = ((adjustment.newLimit - adjustment.oldLimit) / adjustment.oldLimit) * 100;
+    await notificationService.sendPushNotification({
+      title: 'Budget Anpassung',
+      body: `Budget für ${category.name} wurde um ${Math.abs(percentageChange).toFixed(1)}% ${percentageChange >= 0 ? 'erhöht' : 'reduziert'}.`,
+      data: {
+        notificationId: `budget_adj_${Date.now()}`,
+        categoryId,
+        alertId: 'budget_adjustment',
+        type: 'info',
+        budgetLimit: adjustment.newLimit,
+        currentSpent: category.spent,
+        threshold: 0,
+        percentageSpent: (category.spent / adjustment.newLimit) * 100
+      }
+    });
+    return updatedCategory;
   }
 
   // Persistenz
@@ -278,7 +143,7 @@ class BudgetService {
       if (data) {
         this.settings = JSON.parse(data);
       } else {
-        // Initialisiere Standardeinstellungen
+        // Default settings
         this.settings = {
           checkFrequency: 'daily',
           quietHours: {
@@ -315,7 +180,9 @@ class BudgetService {
 
   private async saveSettings(): Promise<void> {
     try {
-      await AsyncStorage.setItem('budget_settings', JSON.stringify(this.settings));
+      if (this.settings) {
+        await AsyncStorage.setItem('budget_settings', JSON.stringify(this.settings));
+      }
     } catch (error) {
       console.error('Fehler beim Speichern der Budget-Einstellungen:', error);
     }
@@ -333,21 +200,170 @@ class BudgetService {
     }
   }
 
-  private async saveNotifications(): Promise<void> {
-    try {
-      const data = Object.fromEntries(this.notifications);
-      await AsyncStorage.setItem('budget_notifications', JSON.stringify(data));
-    } catch (error) {
-      console.error('Fehler beim Speichern der Budget-Benachrichtigungen:', error);
+  // Budget-Status und Prüfungen
+  private async checkBudgets(): Promise<void> {
+    if (!await this.shouldCheck()) return;
+
+    for (const category of this.categories.values()) {
+      const status = await this.calculateBudgetStatus(category);
+      await this.checkAlerts(category, status);
     }
   }
 
-  private async getLastCheckTime(): Promise<Date | null> {
+  private async shouldCheck(): Promise<boolean> {
+    if (!this.settings) return false;
+    
+    const now = new Date();
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTime = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+    // Prüfe Ruhezeiten
+    if (this.settings.quietHours.enabled) {
+      const start = this.settings.quietHours.start;
+      const end = this.settings.quietHours.end;
+      if (currentTime >= start || currentTime <= end) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private async calculateBudgetStatus(category: BudgetCategory): Promise<BudgetStatus> {
+    const now = new Date();
+    const { startDate, endDate } = this.getPeriodDates(category.period, now);
+
+    const activeAlerts = category.alerts.filter(alert => 
+      alert.enabled && ((category.spent / category.limit) * 100) >= alert.threshold
+    );
+
+    const status: BudgetStatus = {
+      categoryId: category.id,
+      period: category.period,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      limit: category.limit,
+      spent: category.spent,
+      remaining: category.limit - category.spent,
+      percentageSpent: (category.spent / category.limit) * 100,
+      projectedOverspend: await this.calculateProjectedOverspend(category),
+      lastChecked: now.toISOString(),
+      activeAlerts
+    };
+
+    return status;
+  }
+
+  private async checkAlerts(category: BudgetCategory, status: BudgetStatus): Promise<void> {
+    for (const alert of category.alerts) {
+      if (!alert.enabled) continue;
+
+      const threshold = alert.threshold;
+      const percentageSpent = (status.spent / status.limit) * 100;
+
+      if (percentageSpent >= threshold) {
+        const notificationId = `alert_${category.id}_${alert.id}_${Date.now()}`;
+        const message = alert.message.replace('{percentage}', percentageSpent.toFixed(1));
+
+        await notificationService.sendPushNotification({
+          title: alert.type === 'critical' ? 'Budget Warnung!' : 'Budget Hinweis',
+          body: message,
+          data: {
+            notificationId,
+            categoryId: category.id,
+            alertId: alert.id,
+            type: alert.type,
+            budgetLimit: status.limit,
+            currentSpent: status.spent,
+            threshold: alert.threshold,
+            percentageSpent
+          }
+        });
+      }
+    }
+  }
+
+  private async calculateProjectedOverspend(category: BudgetCategory): Promise<number | null> {
     try {
-      const lastCheck = await AsyncStorage.getItem('last_budget_check');
-      return lastCheck ? new Date(JSON.parse(lastCheck)) : null;
-    } catch {
+      const spendingHistory = await this.getHistoricalSpending(category.id);
+      if (spendingHistory.length < 3) return null;
+
+      // Berechne durchschnittliche tägliche Ausgaben
+      const totalSpent = spendingHistory.reduce((sum, item) => sum + item.amount, 0);
+      const daysInHistory = spendingHistory.length;
+      const averageDailySpend = totalSpent / daysInHistory;
+
+      // Bestimme verbleibende Tage in der Periode
+      const now = new Date();
+      const { endDate } = this.getPeriodDates(category.period, now);
+      const remainingDays = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      // Projiziere Gesamtausgaben
+      const projectedTotal = category.spent + (averageDailySpend * remainingDays);
+      
+      return projectedTotal > category.limit ? projectedTotal - category.limit : 0;
+    } catch (error) {
+      console.error('Fehler bei der Berechnung der projizierten Überschreitung:', error);
       return null;
+    }
+  }
+
+  private getPeriodDates(period: string, date: Date): { startDate: Date; endDate: Date } {
+    const startDate = new Date(date);
+    const endDate = new Date(date);
+
+    switch (period) {
+      case 'weekly':
+        startDate.setDate(date.getDate() - date.getDay());
+        endDate.setDate(startDate.getDate() + 6);
+        break;
+      case 'monthly':
+        startDate.setDate(1);
+        endDate.setMonth(date.getMonth() + 1);
+        endDate.setDate(0);
+        break;
+      case 'yearly':
+        startDate.setMonth(0, 1);
+        endDate.setMonth(11, 31);
+        break;
+    }
+
+    return { startDate, endDate };
+  }
+
+  private async getHistoricalSpending(categoryId: string): Promise<Array<{ amount: number; date: string }>> {
+    try {
+      const data = await AsyncStorage.getItem(`spending_history_${categoryId}`);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Ausgabenhistorie:', error);
+      return [];
+    }
+  }
+
+  private async saveBudgetAdjustmentHistory(categoryId: string, adjustment: BudgetAdjustmentHistory): Promise<void> {
+    try {
+      const key = `budget_adjustments_${categoryId}`;
+      const existingData = await AsyncStorage.getItem(key);
+      const adjustments = existingData ? JSON.parse(existingData) : [];
+      
+      adjustments.push(adjustment);
+      
+      await AsyncStorage.setItem(key, JSON.stringify(adjustments));
+    } catch (error) {
+      console.error('Fehler beim Speichern der Budget-Anpassungshistorie:', error);
+    }
+  }
+
+  async getBudgetAdjustmentHistory(categoryId: string): Promise<BudgetAdjustmentHistory[]> {
+    try {
+      const key = `budget_adjustments_${categoryId}`;
+      const data = await AsyncStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Budget-Anpassungshistorie:', error);
+      return [];
     }
   }
 
@@ -358,6 +374,28 @@ class BudgetService {
 
     // Prüfe Budgets alle 15 Minuten
     this.checkInterval = setInterval(() => this.checkBudgets(), 15 * 60 * 1000);
+  }
+
+  // Öffentliche Hilfsmethoden
+  getCategories(): Map<string, BudgetCategory> {
+    return this.categories;
+  }
+
+  getNotifications(): Map<string, BudgetNotification> {
+    return this.notifications;
+  }
+
+  async getCategoryStatus(categoryId: string): Promise<BudgetStatus | null> {
+    const category = this.categories.get(categoryId);
+    if (!category) return null;
+    return this.calculateBudgetStatus(category);
+  }
+
+  formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount);
   }
 }
 

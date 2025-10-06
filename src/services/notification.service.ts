@@ -6,7 +6,7 @@ import notifee, {
 } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BudgetNotification } from '../types/budget';
+import { BudgetNotification, NotificationChannel } from '../types/budget';
 
 interface PushNotificationPayload {
   title: string;
@@ -92,6 +92,55 @@ class NotificationService {
     }
   }
 
+  async send(notification: BudgetNotification, channels: NotificationChannel[]): Promise<void> {
+    try {
+      const payload = this.createNotificationPayload(notification);
+
+      for (const channel of channels) {
+        switch (channel) {
+          case 'push':
+            await this.sendPushNotification(payload);
+            break;
+          case 'inApp':
+            await this.sendInAppNotification(notification);
+            break;
+          case 'email':
+            await this.sendEmailNotification(notification);
+            break;
+        }
+      }
+    } catch (error) {
+      console.error('Fehler beim Senden der Benachrichtigung:', error);
+    }
+  }
+
+  private createNotificationPayload(notification: BudgetNotification): PushNotificationPayload {
+    let title = 'Budget-Benachrichtigung';
+    switch (notification.type) {
+      case 'warning':
+        title = '⚠️ Budget-Warnung';
+        break;
+      case 'critical':
+        title = '🚨 Kritische Budget-Warnung';
+        break;
+      case 'info':
+        title = 'ℹ️ Budget-Information';
+        break;
+    }
+
+    return {
+      title,
+      body: notification.message,
+      data: {
+        notificationId: notification.id,
+        categoryId: notification.categoryId,
+        type: notification.type,
+        alertId: notification.alertId,
+        budgetData: notification.data
+      }
+    };
+  }
+
   async sendPushNotification(payload: PushNotificationPayload): Promise<void> {
     try {
       // Prüfe ob Benachrichtigungen aktiv sind
@@ -135,13 +184,18 @@ class NotificationService {
 
   async sendInAppNotification(notification: BudgetNotification): Promise<void> {
     try {
-      // Implementiere In-App-Benachrichtigungen
-      // Dies könnte über einen Event-Bus, Redux oder einen anderen State-Management-Mechanismus erfolgen
-      console.log('In-App-Benachrichtigung:', notification);
+      const key = `inapp_notification_${notification.id}`;
+      await AsyncStorage.setItem(key, JSON.stringify(notification));
     } catch (error) {
-      console.error('Fehler beim Senden der In-App-Benachrichtigung:', error);
+      console.error('Fehler beim Speichern der In-App-Benachrichtigung:', error);
       throw error;
     }
+  }
+
+  private async sendEmailNotification(notification: BudgetNotification): Promise<void> {
+    // TODO: Implementiere E-Mail-Versand
+    // Dies würde normalerweise eine Integration mit einem E-Mail-Service erfordern
+    console.log('E-Mail-Benachrichtigung noch nicht implementiert:', notification);
   }
 
   private async areNotificationsEnabled(): Promise<boolean> {
@@ -167,6 +221,51 @@ class NotificationService {
       case 'warning':
       default:
         return 'budget_warnings';
+    }
+  }
+
+  async getInAppNotifications(): Promise<BudgetNotification[]> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const inAppKeys = keys.filter(key => key.startsWith('inapp_notification_'));
+      
+      const notifications: BudgetNotification[] = [];
+      for (const key of inAppKeys) {
+        const data = await AsyncStorage.getItem(key);
+        if (data) {
+          notifications.push(JSON.parse(data));
+        }
+      }
+      
+      return notifications.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+    } catch (error) {
+      console.error('Fehler beim Laden der In-App-Benachrichtigungen:', error);
+      return [];
+    }
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<void> {
+    try {
+      const key = `inapp_notification_${notificationId}`;
+      const data = await AsyncStorage.getItem(key);
+      if (data) {
+        const notification: BudgetNotification = JSON.parse(data);
+        notification.status = 'read';
+        await AsyncStorage.setItem(key, JSON.stringify(notification));
+      }
+    } catch (error) {
+      console.error('Fehler beim Markieren der Benachrichtigung als gelesen:', error);
+    }
+  }
+
+  async deleteNotification(notificationId: string): Promise<void> {
+    try {
+      const key = `inapp_notification_${notificationId}`;
+      await AsyncStorage.removeItem(key);
+    } catch (error) {
+      console.error('Fehler beim Löschen der Benachrichtigung:', error);
     }
   }
 
@@ -197,7 +296,6 @@ class NotificationService {
     }
   }
 
-  // Weitere Hilfsmethoden
   async clearNotificationHistory(): Promise<void> {
     try {
       await AsyncStorage.removeItem('notification_history');
