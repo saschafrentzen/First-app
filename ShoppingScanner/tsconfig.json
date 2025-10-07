@@ -7,6 +7,8 @@
     "isolatedModules": true,
     "jsx": "react-native",
     "moduleResolution": "node",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "module": "esnext",
     "noEmit": true,
     "skipLibCheck": true,
