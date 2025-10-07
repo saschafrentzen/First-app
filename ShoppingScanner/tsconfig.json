@@ -14,7 +14,12 @@
     "target": "esnext",
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "rootDirs": ["src"],
+    "paths": {
+      "@app/*": ["src/*"],
+      "*": ["src/*", "node_modules/*"]
+    }
   },
   "include": [
     "src/**/*",

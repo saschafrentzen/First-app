@@ -10,6 +10,10 @@
     "strict": true,
     "moduleResolution": "node",
     "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "*": ["node_modules/*", "ShoppingScanner/src/*"]
+    },
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
