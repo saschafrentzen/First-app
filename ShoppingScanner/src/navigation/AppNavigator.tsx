@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { IconButton } from 'react-native-paper';
-import { RootStackParamList } from '../types/navigation';
+import { RootStackParamList, MainTabsParamList } from '../types/navigation';
 
 // Screens importieren
 import { CreateListScreen } from '../screens/CreateListScreen';
@@ -12,9 +12,10 @@ import { ListsScreen } from '../screens/ListsScreen';
 import { ListDetailsScreen } from '../screens/ListDetailsScreen';
 import { ScannerScreen } from '../screens/ScannerScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { SmartFridgeScreen } from '../screens/SmartFridgeScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabsParamList>();
 
 const TabNavigator = () => {
   return (
@@ -27,11 +28,11 @@ const TabNavigator = () => {
             case 'Home':
               iconName = 'home';
               break;
-            case 'Lists':
+            case 'ListStack':
               iconName = 'format-list-bulleted';
               break;
-            case 'Scanner':
-              iconName = 'barcode-scan';
+            case 'HouseholdStack':
+              iconName = 'account-group';
               break;
             case 'Settings':
               iconName = 'cog';
@@ -45,8 +46,20 @@ const TabNavigator = () => {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Lists" component={ListsScreen} />
-      <Tab.Screen name="Scanner" component={ScannerScreen} />
+      <Tab.Screen 
+        name="ListStack" 
+        component={ListsScreen}
+        options={{
+          title: 'Listen'
+        }}
+      />
+      <Tab.Screen 
+        name="HouseholdStack" 
+        component={HomeScreen}
+        options={{
+          title: 'Haushalte'
+        }}
+      />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -73,6 +86,11 @@ export const AppNavigator = () => {
           name="ListDetails" 
           component={ListDetailsScreen}
           options={{ title: 'Liste Details' }}
+        />
+        <Stack.Screen
+          name="SmartFridge"
+          component={SmartFridgeScreen}
+          options={{ title: 'Smart Kühlschrank' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

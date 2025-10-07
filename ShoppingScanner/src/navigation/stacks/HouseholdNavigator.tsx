@@ -29,7 +29,7 @@ export const HouseholdNavigator: React.FC = () => {
       }}
     >
       <Stack.Screen
-        name="HouseholdList"
+        name="Households"
         component={HouseholdScreen}
         options={{
           title: 'Haushalte',

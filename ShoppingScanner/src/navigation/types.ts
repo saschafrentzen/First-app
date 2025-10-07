@@ -16,4 +16,6 @@ export type AppStackParamList = {
     productId: string;
     productName: string;
   };
+  SmartFridge: undefined; // Hauptscreen für den Kühlschrank
+  FridgeDetail: { fridgeId: string }; // Detailansicht für einen spezifischen Kühlschrank
 };

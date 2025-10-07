@@ -10,6 +10,8 @@ export * from './recipe';
 export * from './user';
 export * from './recipeShare';
 export * from './priceComparison';
+export * from './shopping';
+export * from './smartHome';
 
 // Service-Typen
 export interface ServiceResponse<T> {

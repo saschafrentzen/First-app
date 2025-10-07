@@ -2,14 +2,14 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MainTabParamList } from '../types/navigation';
+import { MainTabsParamList } from '../types/navigation';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ListNavigator } from './stacks/ListNavigator';
 import { HouseholdNavigator } from './stacks/HouseholdNavigator';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { theme } from '../theme';
 
-const Tab = createBottomTabNavigator<MainTabParamList>();
+const Tab = createBottomTabNavigator<MainTabsParamList>();
 
 export const Navigation: React.FC = () => {
   return (
